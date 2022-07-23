@@ -1,0 +1,64 @@
+# GitHub Actions configuration **EXAMPLE**,
+# MODIFY IT ACCORDING TO YOUR NEEDS!
+# Reference: https://docs.github.com/en/actions
+
+name: tests
+
+on:
+  push:
+    # Avoid using all the resources/limits available by checking only
+    # relevant branches and tags. Other branches can be checked via PRs.
+    tags: ['v[0-9]*', '[0-9]+.[0-9]+*']  # Match tags that resemble a version
+  workflow_dispatch:  # Allow manually triggering the workflow
+
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{ github.ref_type }}-
+    ${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      wheel-distribution: ${{ steps.wheel-distribution.outputs.path }}
+    steps:
+      - uses: actions/checkout@v3
+        with: {fetch-depth: 0}  # deep clone for setuptools-scm
+      - uses: actions/setup-python@v4
+        with: {python-version: "3.10"}
+      - name: Build package distribution files
+        run: pipx run tox -e clean,build
+      - name: Record the path of wheel distribution
+        id: wheel-distribution
+        run: echo "::set-output name=path::$(ls dist/*.whl)"
+      - name: Store the distribution files for use in other stages
+        # `tests` and `publish` will use the same pre-built distributions,
+        # so we make sure to release the exact same package that was tested
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-distribution-files
+          path: dist/
+          retention-days: 1
+
+
+  publish:
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: PROD
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with: {python-version: "3.10"}
+      - name: Retrieve pre-built distribution files
+        uses: actions/download-artifact@v3
+        with: {name: python-distribution-files, path: dist/}
+      - name: Publish Package
+        env:
+          # TODO: Set your PYPI_TOKEN as a secret using GitHub UI
+          # - https://pypi.org/help/#apitoken
+          # - https://docs.github.com/en/actions/security-guides/encrypted-secrets
+          TWINE_REPOSITORY: pypi
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: pipx run tox -e publish -- --repository pypi
