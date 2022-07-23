@@ -2,7 +2,7 @@
 Contributing
 ============
 
-Welcome to ``pps`` contributor's guide.
+Welcome to ``productivity-stack`` contributor's guide.
 
 This document focuses on getting any potential contributor familiarized
 with the development processes, but `other kinds of contributions`_ are also
